@@ -1,6 +1,6 @@
 import unittest
-from lime.wrappers.scikit_image import BaseWrapper
-from lime.wrappers.scikit_image import SegmentationAlgorithm
+from xlime.wrappers.scikit_image import BaseWrapper
+from xlime.wrappers.scikit_image import SegmentationAlgorithm
 from skimage.segmentation import quickshift
 from skimage.data import astronaut
 from skimage.util import img_as_float
