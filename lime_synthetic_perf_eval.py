@@ -1,6 +1,6 @@
 """
-A helper script for evaluating performance of changes to the tabular explainer, in this case different
-implementations and methods for distance calculation.
+A script to evaluate performance of lime using a 
+synthetic datasets created based on arguments of the code.
 """
 
 import argparse
