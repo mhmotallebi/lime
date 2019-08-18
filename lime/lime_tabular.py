@@ -419,7 +419,7 @@ class LimeTabularExplainer(object):
             discretized_feature_names = copy.deepcopy(feature_names)
             for f in self.discretizer.names:
                 discretized_feature_names[f] = self.discretizer.names[f][int(
-                        discretized_instance[f])]
+                        discretized_instance[f+1])]
 
         domain_mapper = TableDomainMapper(feature_names,
                                           values,
@@ -537,7 +537,7 @@ class LimeTabularExplainer(object):
             freqs = self.feature_frequencies[column]
             inverse_column = self.random_state.choice(values, size=num_samples,
                                                       replace=True, p=freqs)
-            binary_column = np.array([1 if x == first_row[column]
+            binary_column = np.array([1 if x == first_row[column+1]
                                       else 0 for x in inverse_column])
             binary_column[0] = 1
             inverse_column[0] = data[0, column]

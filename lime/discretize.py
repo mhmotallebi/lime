@@ -114,10 +114,11 @@ class BaseDiscretizer():
         Returns:
             numpy array of same dimension, discretized.
         """
+        # they are off by one!
         ret = data.copy()
         for feature in self.lambdas:
             if len(data.shape) == 1:
-                ret[feature] = int(self.lambdas[feature](ret[feature]))
+                ret[feature+1] = int(self.lambdas[feature](ret[feature+1]))
             else:
                 ret[:, feature] = self.lambdas[feature](
                     ret[:, feature]).astype(int)
