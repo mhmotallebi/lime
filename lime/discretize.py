@@ -125,7 +125,7 @@ class BaseDiscretizer():
                 # print('feature:', feature)
                 # print('self.lambdas[feature]:', self.lambdas[feature])
                 # print('ret[feature+1]:', ret[feature+1])
-                ret[feature+1] = int(self.lambdas[feature](ret[feature+1]))
+                ret.iloc[feature] = int(self.lambdas[feature](ret.iloc[feature]))
             else:
                 ret[:, feature] = self.lambdas[feature](
                     ret[:, feature]).astype(int)

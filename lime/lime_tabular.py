@@ -405,7 +405,7 @@ class LimeTabularExplainer(object):
         for i in self.categorical_features:
             if self.discretizer is not None and i in self.discretizer.lambdas:
                 continue
-            name = int(data_row[i])
+            name = int(data_row.iloc[i])
             if i in self.categorical_names:
                 name = self.categorical_names[i][name]
             feature_names[i] = '%s=%s' % (feature_names[i], name)
@@ -425,7 +425,7 @@ class LimeTabularExplainer(object):
                 # print('self.discretizer.names[f]:', self.discretizer.names[f])
                 # print('discretized_instance[f+1]:', discretized_instance[f+1])
                 discretized_feature_names[f] = self.discretizer.names[f][int(
-                        discretized_instance[f+1])]
+                        discretized_instance.iloc[f])]
 
         domain_mapper = TableDomainMapper(feature_names,
                                           values,
@@ -538,10 +538,10 @@ class LimeTabularExplainer(object):
             first_row = self.discretizer.discretize(data_row)
         data[0] = data_row.copy()
         inverse = data.copy()
-        print('self.feature_values:', self.feature_values)
-        print('self.feature_frequencies:', self.feature_frequencies)
-        print('inverse:', inverse)
-        print('categorical_features:', categorical_features)
+        # print('self.feature_values:', self.feature_values)
+        # print('self.feature_frequencies:', self.feature_frequencies)
+        # print('inverse:', inverse)
+        # print('categorical_features:', categorical_features)
         # print(':', )
         # print(':', )
         for column in categorical_features:
@@ -549,10 +549,10 @@ class LimeTabularExplainer(object):
             freqs = self.feature_frequencies[column]
             inverse_column = self.random_state.choice(values, size=num_samples,
                                                       replace=True, p=freqs)
-            print('inverse_column:', inverse_column)
-            print('column:', column)
-            print('first_row:', first_row)
-            print('type:', type(first_row))
+            # print('inverse_column:', inverse_column)
+            # print('column:', column)
+            # print('first_row:', first_row)
+            # print('type:', type(first_row))
             binary_column = np.array([1 if x == first_row.iloc[column]
                                       else 0 for x in inverse_column])
             binary_column[0] = 1
