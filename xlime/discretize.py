@@ -70,9 +70,11 @@ class BaseDiscretizer():
             self.undiscretize_idxs[feature] = (
                 [self.precompute_size] * (n_bins + 1))
             self.undiscretize_precomputed[feature] = [[]] * (n_bins + 1)
+            # print('feature name:', feature)
             for i in range(n_bins - 1):
                 self.names[feature].append('%.2f < %s <= %.2f' %
                                            (qts[i], name, qts[i + 1]))
+                # print(self.names[feature][-1])
             self.names[feature].append('%s > %.2f' % (name, qts[n_bins - 1]))
 
             self.lambdas[feature] = lambda x, qts=qts: np.searchsorted(qts, x)
@@ -116,9 +118,14 @@ class BaseDiscretizer():
         """
         # they are off by one!
         ret = data.copy()
+        # print('data:', data)
+        # print('self.lambdas:', self.lambdas)
         for feature in self.lambdas:
             if len(data.shape) == 1:
-                ret[feature+1] = int(self.lambdas[feature](ret[feature+1]))
+                # print('feature:', feature)
+                # print('self.lambdas[feature]:', self.lambdas[feature])
+                # print('ret[feature+1]:', ret[feature+1])
+                ret.iloc[feature] = int(self.lambdas[feature](ret.iloc[feature]))
             else:
                 ret[:, feature] = self.lambdas[feature](
                     ret[:, feature]).astype(int)
