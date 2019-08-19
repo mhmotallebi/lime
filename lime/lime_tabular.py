@@ -553,7 +553,7 @@ class LimeTabularExplainer(object):
             print('column:', column)
             print('first_row:', first_row)
             print('type:', type(first_row))
-            binary_column = np.array([1 if x == first_row[column+1]
+            binary_column = np.array([1 if x == first_row.iloc[column]
                                       else 0 for x in inverse_column])
             binary_column[0] = 1
             inverse_column[0] = data[0, column]
