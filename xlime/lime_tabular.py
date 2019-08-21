@@ -538,31 +538,51 @@ class LimeTabularExplainer(object):
             first_row = self.discretizer.discretize(data_row)
         data[0] = data_row.copy()
         inverse = data.copy()
-        # print('self.feature_values:', self.feature_values)
-        # print('self.feature_frequencies:', self.feature_frequencies)
-        # print('inverse:', inverse)
-        # print('categorical_features:', categorical_features)
-        # print(':', )
-        # print(':', )
+
         for column in categorical_features:
             values = self.feature_values[column]
             freqs = self.feature_frequencies[column]
             inverse_column = self.random_state.choice(values, size=num_samples,
                                                       replace=True, p=freqs)
-            # print('inverse_column:', inverse_column)
-            # print('column:', column)
-            # print('first_row:', first_row)
-            # print('type:', type(first_row))
-            binary_column = np.array([1 if x == first_row.iloc[column]
-                                      else 0 for x in inverse_column])
-            binary_column[0] = 1
             inverse_column[0] = data[0, column]
-            data[:, column] = binary_column
             inverse[:, column] = inverse_column
+
+
+        ####################################
+        # let's create the perturbed dataset.
+
+        # This step creates instances that only one feature is different than
+        # the original data point (first circle!), and that feature can be only in the
+        # next bucket (the two closest ones)
+        all_discretized = np.array([first_row]).copy()
+        for i in range(1, num_cols+1):
+            column = i - 1
+            if int(first_row.iloc[column]+1) <= inverse[1:,column].max().astype(int):
+                all_discretized = np.append(all_discretized, np.array([first_row]), axis=0)
+                all_discretized[-1, column] += 1
+            if int(first_row.iloc[column]-1) >= inverse[1:,column].min().astype(int):
+                all_discretized = np.append(all_discretized, np.array([first_row]), axis=0)
+                all_discretized[-1, column] -= 1
+
+        # all_data will store a representation of the sampled dataset
+        # where each row corresponds to one data point. For each feature in a row,
+        # 1 implies that its value matches the value of the original data point while
+        # 0 implies otherwise.
+        all_data = np.ones(all_discretized.shape)
+        for column in range(num_cols):
+            all_data[:, column] = np.array([1 if x == first_row.iloc[column]
+                                      else 0 for x in all_discretized[:,column]])
+        all_data[0,:] = 1
+
+
+        #undescretizing the dataset (to be sent to the black-box model for labelling.)
         if self.discretizer is not None:
-            inverse[1:] = self.discretizer.undiscretize(inverse[1:])
-        inverse[0] = data_row
-        return data, inverse
+            all_discretized[1:] = self.discretizer.undiscretize(all_discretized[1:])
+        all_discretized[0] = data_row
+
+        print('size:', all_data.shape[0])
+        return all_data, all_discretized
+
 
 
 class RecurrentTabularExplainer(LimeTabularExplainer):
