@@ -405,7 +405,7 @@ class LimeTabularExplainer(object):
         for i in self.categorical_features:
             if self.discretizer is not None and i in self.discretizer.lambdas:
                 continue
-            name = int(data_row.iloc[i])
+            name = int(data_row[i])
             if i in self.categorical_names:
                 name = self.categorical_names[i][name]
             feature_names[i] = '%s=%s' % (feature_names[i], name)
@@ -425,7 +425,7 @@ class LimeTabularExplainer(object):
                 # print('self.discretizer.names[f]:', self.discretizer.names[f])
                 # print('discretized_instance[f+1]:', discretized_instance[f+1])
                 discretized_feature_names[f] = self.discretizer.names[f][int(
-                        discretized_instance.iloc[f])]
+                        discretized_instance[f])]
 
         domain_mapper = TableDomainMapper(feature_names,
                                           values,
@@ -553,7 +553,7 @@ class LimeTabularExplainer(object):
             # print('column:', column)
             # print('first_row:', first_row)
             # print('type:', type(first_row))
-            binary_column = np.array([1 if x == first_row.iloc[column]
+            binary_column = np.array([1 if x == first_row[column]
                                       else 0 for x in inverse_column])
             binary_column[0] = 1
             inverse_column[0] = data[0, column]
