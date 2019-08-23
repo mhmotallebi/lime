@@ -564,6 +564,23 @@ class LimeTabularExplainer(object):
                 all_discretized = np.append(all_discretized, np.array([first_row]), axis=0)
                 all_discretized[-1, column] -= 1
 
+        # let's add all cases where 2 features are different:
+        init_size = all_discretized.shape[0]
+        for row_1 in range(1, init_size):
+            for row_2 in range(row_1+1, init_size):
+                if np.nonzero(np.bitwise_xor(all_discretized[row_1].astype(int),
+                        all_discretized[row_2].astype(int)))[0].shape[0]<2:
+                    continue
+                x = []
+                for i in range(all_discretized.shape[1]):
+                    x.append(all_discretized[0,i].astype(int) ^
+                        all_discretized[row_1,i].astype(int) ^
+                        all_discretized[row_2,i].astype(int))
+                if len(x)>0:
+                    all_discretized = np.append(all_discretized, np.array([x]), axis=0)
+
+
+        # print(all_discretized)
         # all_data will store a representation of the sampled dataset
         # where each row corresponds to one data point. For each feature in a row,
         # 1 implies that its value matches the value of the original data point while
