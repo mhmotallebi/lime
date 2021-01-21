@@ -6,12 +6,24 @@ import copy
 from functools import partial
 import json
 import warnings
+import random
+# random.seed(1)
+
+import itertools
+import copy
+from collections import Counter
+import math
 
 import numpy as np
+# np.random.seed(1)
+
 import scipy as sp
 import sklearn
 import sklearn.preprocessing
 from sklearn.utils import check_random_state
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.linear_model import SGDClassifier
+from sklearn.preprocessing import OneHotEncoder
 
 from xlime.discretize import QuartileDiscretizer
 from xlime.discretize import DecileDiscretizer
@@ -21,6 +33,14 @@ from xlime.discretize import StatsDiscretizer
 from . import explanation
 from . import lime_base
 
+
+from modAL.models import ActiveLearner
+from modAL.uncertainty import entropy_sampling
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.naive_bayes import GaussianNB
+from imblearn.over_sampling import RandomOverSampler
 
 class TableDomainMapper(explanation.DomainMapper):
     """Maps feature ids to names, generates table views, etc"""
@@ -201,6 +221,7 @@ class LimeTabularExplainer(object):
 
         self.categorical_features = list(categorical_features)
         self.feature_names = list(feature_names)
+        self.total_sizes = 0
 
         self.discretizer = None
         if discretize_continuous and not sp.sparse.issparse(training_data):
@@ -298,7 +319,9 @@ class LimeTabularExplainer(object):
                          num_features=10,
                          num_samples=5000,
                          distance_metric='euclidean',
-                         model_regressor=None):
+                         model_regressor=None,
+                         classes=None,
+                         xlime_mode='ONE'):
         """Generates explanations for a prediction.
 
         First, we generate neighborhood data by randomly perturbing features
@@ -331,10 +354,23 @@ class LimeTabularExplainer(object):
             An Explanation object (see explanation.py) with the corresponding
             explanations.
         """
+#         print('inside 1')
         if sp.sparse.issparse(data_row) and not sp.sparse.isspmatrix_csr(data_row):
             # Preventative code: if sparse, convert to csr format if not in csr format already
             data_row = data_row.tocsr()
-        data, inverse = self.__data_inverse(data_row, num_samples)
+        if type(xlime_mode)==list:            
+            sd_data = []
+            ohe = []
+            yss = []
+            for x in xlime_mode:
+                data, inverse, _sd_data, _ohe = self.__data_inverse(data_row, num_samples, predict_fn, classes, x)
+                sd_data.append(_sd_data)
+                ohe.append(_ohe)
+                yss_ = predict_fn(inverse)
+                yss.append(yss_)
+        else:
+            data, inverse, sd_data, ohe = self.__data_inverse(data_row, num_samples, predict_fn, classes, xlime_mode)
+            yss = predict_fn(inverse)
         if sp.sparse.issparse(data):
             # Note in sparse case we don't subtract mean since data would become dense
             scaled_data = data.multiply(self.scaler.scale_)
@@ -349,47 +385,47 @@ class LimeTabularExplainer(object):
                 metric=distance_metric
         ).ravel()
 
-        yss = predict_fn(inverse)
+#         print('inside 2')
 
         # for classification, the model needs to provide a list of tuples - classes
         # along with prediction probabilities
-        if self.mode == "classification":
-            if len(yss.shape) == 1:
-                raise NotImplementedError("LIME does not currently support "
-                                          "classifier models without probability "
-                                          "scores. If this conflicts with your "
-                                          "use case, please let us know: "
-                                          "https://github.com/datascienceinc/lime/issues/16")
-            elif len(yss.shape) == 2:
-                if self.class_names is None:
-                    self.class_names = [str(x) for x in range(yss[0].shape[0])]
-                else:
-                    self.class_names = list(self.class_names)
-                if not np.allclose(yss.sum(axis=1), 1.0):
-                    warnings.warn("""
-                    Prediction probabilties do not sum to 1, and
-                    thus does not constitute a probability space.
-                    Check that you classifier outputs probabilities
-                    (Not log probabilities, or actual class predictions).
-                    """)
-            else:
-                raise ValueError("Your model outputs "
-                                 "arrays with {} dimensions".format(len(yss.shape)))
+#         if self.mode == "classification":
+#             if len(yss.shape) == 1:
+#                 raise NotImplementedError("LIME does not currently support "
+#                                           "classifier models without probability "
+#                                           "scores. If this conflicts with your "
+#                                           "use case, please let us know: "
+#                                           "https://github.com/datascienceinc/lime/issues/16")
+#             elif len(yss.shape) == 2:
+#                 if self.class_names is None:
+#                     self.class_names = [str(x) for x in range(yss[0].shape[0])]
+#                 else:
+#                     self.class_names = list(self.class_names)
+#                 if not np.allclose(yss.sum(axis=1), 1.0):
+#                     warnings.warn("""
+#                     Prediction probabilties do not sum to 1, and
+#                     thus does not constitute a probability space.
+#                     Check that you classifier outputs probabilities
+#                     (Not log probabilities, or actual class predictions).
+#                     """)
+#             else:
+#                 raise ValueError("Your model outputs "
+#                                  "arrays with {} dimensions".format(len(yss.shape)))
 
-        # for regression, the output should be a one-dimensional array of predictions
-        else:
-            try:
-                assert isinstance(yss, np.ndarray) and len(yss.shape) == 1
-            except AssertionError:
-                raise ValueError("Your model needs to output single-dimensional \
-                    numpyarrays, not arrays of {} dimensions".format(yss.shape))
+#         # for regression, the output should be a one-dimensional array of predictions
+#         else:
+#             try:
+#                 assert isinstance(yss, np.ndarray) and len(yss.shape) == 1
+#             except AssertionError:
+#                 raise ValueError("Your model needs to output single-dimensional \
+#                     numpyarrays, not arrays of {} dimensions".format(yss.shape))
 
-            predicted_value = yss[0]
-            min_y = min(yss)
-            max_y = max(yss)
+#             predicted_value = yss[0]
+#             min_y = min(yss)
+#             max_y = max(yss)
 
-            # add a dimension to be compatible with downstream machinery
-            yss = yss[:, np.newaxis]
+#             # add a dimension to be compatible with downstream machinery
+#             yss = yss[:, np.newaxis]
 
         feature_names = copy.deepcopy(self.feature_names)
         if feature_names is None:
@@ -405,7 +441,7 @@ class LimeTabularExplainer(object):
         for i in self.categorical_features:
             if self.discretizer is not None and i in self.discretizer.lambdas:
                 continue
-            name = int(data_row.iloc[i])
+            name = int(data_row[i])
             if i in self.categorical_names:
                 name = self.categorical_names[i][name]
             feature_names[i] = '%s=%s' % (feature_names[i], name)
@@ -425,7 +461,7 @@ class LimeTabularExplainer(object):
                 # print('self.discretizer.names[f]:', self.discretizer.names[f])
                 # print('discretized_instance[f+1]:', discretized_instance[f+1])
                 discretized_feature_names[f] = self.discretizer.names[f][int(
-                        discretized_instance.iloc[f])]
+                        discretized_instance[f])]
 
         domain_mapper = TableDomainMapper(feature_names,
                                           values,
@@ -449,16 +485,21 @@ class LimeTabularExplainer(object):
             ret_exp.max_value = max_y
             labels = [0]
         for label in labels:
+            # print('in for in lime_tabular')
             (ret_exp.intercept[label],
              ret_exp.local_exp[label],
-             ret_exp.score, ret_exp.local_pred) = self.base.explain_instance_with_data(
-                    scaled_data,
-                    yss,
-                    distances,
-                    label,
-                    num_features,
-                    model_regressor=model_regressor,
-                    feature_selection=self.feature_selection)
+             ret_exp.score, 
+             ret_exp.fidelity) = self.base.explain_instance_with_data(
+                                                    scaled_data,
+                                                    yss,
+                                                    distances,
+                                                    label,
+                                                    num_features,
+                                                    model_regressor=model_regressor,
+                                                    feature_selection=self.feature_selection,
+                                                    neighborhood_data_sd=sd_data,
+                                                    ohe=ohe)
+            # print('after for in lime_tabular')
 
         if self.mode == "regression":
             ret_exp.intercept[1] = ret_exp.intercept[0]
@@ -467,9 +508,13 @@ class LimeTabularExplainer(object):
 
         return ret_exp
 
+
     def __data_inverse(self,
                        data_row,
-                       num_samples):
+                       num_samples,
+                       predict_fn,
+                       classes=None,
+                       mode='ONE'):
         """Generates a neighborhood around a prediction.
 
         For numerical features, perturb them by sampling from a Normal(0,1) and
@@ -482,6 +527,7 @@ class LimeTabularExplainer(object):
         Args:
             data_row: 1d numpy array, corresponding to a row
             num_samples: size of the neighborhood to learn the linear model
+            predict_fn: check the description on explain_instance function.
 
         Returns:
             A tuple (data, inverse), where:
@@ -491,6 +537,8 @@ class LimeTabularExplainer(object):
                 inverse: same as data, except the categorical features are not
                 binary, but categorical (as the original data)
         """
+        counter = 0
+        
         is_sparse = sp.sparse.issparse(data_row)
         if is_sparse:
             num_cols = data_row.shape[1]
@@ -537,15 +585,15 @@ class LimeTabularExplainer(object):
         else:
             first_row = self.discretizer.discretize(data_row)
         data[0] = data_row.copy()
-        inverse = data.copy()
+#         inverse = data.copy()
 
-        for column in categorical_features:
-            values = self.feature_values[column]
-            freqs = self.feature_frequencies[column]
-            inverse_column = self.random_state.choice(values, size=num_samples,
-                                                      replace=True, p=freqs)
-            inverse_column[0] = data[0, column]
-            inverse[:, column] = inverse_column
+#         for column in categorical_features:
+#             values = self.feature_values[column]
+#             freqs = self.feature_frequencies[column]
+#             inverse_column = self.random_state.choice(values, size=num_samples,
+#                                                       replace=True, p=freqs)
+#             inverse_column[0] = data[0, column]
+#             inverse[:, column] = inverse_column
 
 
         ####################################
@@ -554,51 +602,219 @@ class LimeTabularExplainer(object):
         # This step creates instances that only one feature is different than
         # the original data point (first circle!), and that feature can be only in the
         # next bucket (the two closest ones)
-        all_discretized = np.array([first_row]).copy()
-        for i in range(1, num_cols+1):
-            column = i - 1
-            if int(first_row.iloc[column]+1) <= inverse[1:,column].max().astype(int):
-                all_discretized = np.append(all_discretized, np.array([first_row]), axis=0)
-                all_discretized[-1, column] += 1
-            if int(first_row.iloc[column]-1) >= inverse[1:,column].min().astype(int):
-                all_discretized = np.append(all_discretized, np.array([first_row]), axis=0)
-                all_discretized[-1, column] -= 1
+        # print('data_row:', data_row)
+        original_label = np.argmax(predict_fn(data_row.reshape((1,-1)))[0])
+        sd_values = []
+        if mode=='ONE':
+            inverse = np.zeros((int(num_samples), first_row.shape[0]))
+#             final_inverse = np.zeros((inverse.shape[0] * 2, first_row.shape[0]))
+            for column in categorical_features:
+                values = self.feature_values[column]
+#             buckets = 1,2,3,..., 10
+#             original x=bucket 2
+#             distance: 1,0,1,2,3,4,5,6,7,...  (|b_i-x|) for i in [1-10]
 
-        # let's add all cases where 2 features are different:
-        init_size = all_discretized.shape[0]
-        for row_1 in range(1, init_size):
-            for row_2 in range(row_1+1, init_size):
-                if np.nonzero(np.bitwise_xor(all_discretized[row_1].astype(int),
-                        all_discretized[row_2].astype(int)))[0].shape[0]<2:
-                    continue
-                x = []
-                for i in range(all_discretized.shape[1]):
-                    x.append(all_discretized[0,i].astype(int) ^
-                        all_discretized[row_1,i].astype(int) ^
-                        all_discretized[row_2,i].astype(int))
-                if len(x)>0:
-                    all_discretized = np.append(all_discretized, np.array([x]), axis=0)
+#                 f = self.feature_frequencies[column]
+                proximities = np.abs(np.subtract(first_row[column], values))
+                freqs = sp.special.softmax(- 1.0 * proximities) # attemp 1
+
+                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
+                                                          replace=True, p=freqs)
+                inverse[:, column] = inverse_column
+            unique_count = np.unique(inverse, axis=0).shape[0]
+#             print(unique_count)
+            
+            sd_values = np.array(inverse).astype(int)
+            sd_values[0] = first_row
+            if self.discretizer is not None:
+                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
+            inverse[0] = data_row
+            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
+            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
+            return data, inverse,sd_values, ohe
+        if mode=='FOURTEEN':
+            inverse = np.zeros((int(num_samples), first_row.shape[0]))
+#             final_inverse = np.zeros((inverse.shape[0] * 2, first_row.shape[0]))
+            for column in categorical_features:
+                values = self.feature_values[column]
+#             buckets = 1,2,3,..., 10
+#             original x=bucket 2
+#             distance: 1,0,1,2,3,4,5,6,7,...  (|b_i-x|) for i in [1-10]
+
+#                 f = self.feature_frequencies[column]
+                proximities = np.abs(np.subtract(first_row[column], values))
+#                 freqs = self.feature_frequencies[column]
+#                 freqs = sp.special.softmax(- 0.5 * proximities) # attemp 0
+                freqs = sp.special.softmax(- 1.0 * proximities) # attemp 1
+#                 freqs = sp.special.softmax(- 0.1 * proximities) # attemp 2
+#                 freqs = sp.special.softmax(- 5.0 * proximities) # attemp x --> one label for many instances, thus bad results (no file)
+#                 freqs = sp.special.softmax(- 2.0 * proximities) # attemp 3
+#                 freqs = [1/len(proximities) for x in proximities] # attemp 4
+#                 freqs = sp.special.softmax(- 0.1 * proximities) # attemp 5
+
+#                 freqs = sp.special.softmax(f/(0.5*proximities+1))
+#                 freqs = [1./len(values) for x in range(len(values))] # totally random!
+#                 inverse_column = self.random_state.choice(values, size=num_samples,
+#                                                           replace=True, p=freqs)
+
+#                 if random.random()>0.5: # attempt 6, Osmar's suggestion
+#                     freqs = sp.special.softmax(- 1.0 * proximities) # attempt 6
+#                 else: # attempt 6
+#                     freqs = [1/len(proximities) for x in proximities] # attempt 6
+
+                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
+                                                          replace=True, p=freqs)
+#                 inverse_column = self.random_state.choice(values, size=inverse.shape[0],
+#                                                           replace=True, p=(freqs+1.0)/(1.0+freqs.shape[0]))
+#                 sd_values.append(inverse_column)
+
+#                 binary_column = np.array([1 if x == first_row[column]
+#                                           else 0 for x in inverse_column])
+#                 binary_column[0] = 1
+#                 data[:, column] = binary_column
+            
+#                 inverse_column[0] = data[0, column]
+                inverse[:, column] = inverse_column
+            unique_count = np.unique(inverse, axis=0).shape[0]
+            
+            sd_values = np.array(inverse).astype(int)
+            sd_values[0] = first_row
+            if self.discretizer is not None:
+                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
+            inverse[0] = data_row
+            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
+            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
+            return data, inverse,sd_values, ohe
+            
+        elif mode=='FIFTEEN':
+            inverse = np.zeros((int(num_samples), first_row.shape[0]))
+#             final_inverse = np.zeros((inverse.shape[0] * 2, first_row.shape[0]))
+            for column in categorical_features:
+                values = self.feature_values[column]
+#                 f = self.feature_frequencies[column]
+                proximities = np.abs(np.subtract(first_row[column], values))
+#                 freqs = self.feature_frequencies[column]
+#                 freqs = sp.special.softmax(- 0.5 * proximities) # attemp 0
+#                 freqs = sp.special.softmax(- 1.0 * proximities) # attemp 1
+#                 freqs = sp.special.softmax(- 0.1 * proximities) # attemp 2
+#                 freqs = sp.special.softmax(- 5.0 * proximities) # attemp x --> one label for many instances, thus bad results (no file)
+#                 freqs = sp.special.softmax(- 2.0 * proximities) # attemp 3
+                freqs = [1/len(proximities) for x in proximities] # attemp 4
+#                 freqs = sp.special.softmax(- 0.1 * proximities) # attemp 5
+
+#                 freqs = sp.special.softmax(f/(0.5*proximities+1))
+#                 freqs = [1./len(values) for x in range(len(values))] # totally random!
+#                 inverse_column = self.random_state.choice(values, size=num_samples,
+#                                                           replace=True, p=freqs)
+                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
+                                                          replace=True, p=freqs)
+#                 inverse_column = self.random_state.choice(values, size=inverse.shape[0],
+#                                                           replace=True, p=(freqs+1.0)/(1.0+freqs.shape[0]))
+#                 sd_values.append(inverse_column)
+
+#                 binary_column = np.array([1 if x == first_row[column]
+#                                           else 0 for x in inverse_column])
+#                 binary_column[0] = 1
+#                 data[:, column] = binary_column
+            
+#                 inverse_column[0] = data[0, column]
+                inverse[:, column] = inverse_column
+            unique_count = np.unique(inverse, axis=0).shape[0]
+            
+            sd_values = np.array(inverse).astype(int)
+            sd_values[0] = first_row
+            if self.discretizer is not None:
+                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
+            inverse[0] = data_row
+            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
+            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
+            return data, inverse,sd_values, ohe
+        elif mode=='SIXTEEN':
+            inverse = np.zeros((int(num_samples), first_row.shape[0]))
+            for column in categorical_features:
+                values = self.feature_values[column]
+                proximities = np.abs(np.subtract(first_row[column], values))
+                freqs = sp.special.softmax(- 0.5 * proximities) ## 
+                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
+                                                          replace=True, p=freqs)
+                inverse[:, column] = inverse_column
+            unique_count = np.unique(inverse, axis=0).shape[0]
+            sd_values = np.array(inverse).astype(int)
+            sd_values[0] = first_row
+            if self.discretizer is not None:
+                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
+            inverse[0] = data_row
+            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
+            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
+            return data, inverse, sd_values, ohe
+        elif mode=='SEVENTEEN':
+            inverse = np.zeros((int(num_samples), first_row.shape[0]))
+            for column in categorical_features:
+                values = self.feature_values[column]
+                proximities = np.abs(np.subtract(first_row[column], values))
+                freqs = sp.special.softmax(- 0.1 * proximities) ## 
+                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
+                                                          replace=True, p=freqs)
+                inverse[:, column] = inverse_column
+            unique_count = np.unique(inverse, axis=0).shape[0]
+            sd_values = np.array(inverse).astype(int)
+            sd_values[0] = first_row
+            if self.discretizer is not None:
+                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
+            inverse[0] = data_row
+            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
+            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
+            return data, inverse, sd_values, ohe
+        elif mode=='EIGHTEEN':
+            inverse = np.zeros((int(num_samples), first_row.shape[0]))
+            for column in categorical_features:
+                values = self.feature_values[column]
+                proximities = np.abs(np.subtract(first_row[column], values))
+                freqs = sp.special.softmax(- 0.01 * proximities) ## 
+                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
+                                                          replace=True, p=freqs)
+                inverse[:, column] = inverse_column
+            unique_count = np.unique(inverse, axis=0).shape[0]
+            sd_values = np.array(inverse).astype(int)
+            sd_values[0] = first_row
+            if self.discretizer is not None:
+                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
+            inverse[0] = data_row
+            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
+            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
+            return data, inverse, sd_values, ohe
+            
+        else:
+            raise Exception("----Unknown mode for XLIME: {} ----".format(mode))
 
 
-        # print(all_discretized)
         # all_data will store a representation of the sampled dataset
         # where each row corresponds to one data point. For each feature in a row,
         # 1 implies that its value matches the value of the original data point while
         # 0 implies otherwise.
+
+        # Let's create data for SigDirect
+        temp_data = all_discretized.copy()
+        temp_data[0] = first_row
+        ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
+        sd_values = np.asarray(ohe.fit_transform(temp_data).todense()).astype(int)
+        
+        # This data is not important when SigDirect is used as the explainer
         all_data = np.ones(all_discretized.shape)
         for column in range(num_cols):
-            all_data[:, column] = np.array([1 if x == first_row.iloc[column]
+            all_data[:, column] = np.array([1 if x == first_row[column]
                                       else 0 for x in all_discretized[:,column]])
         all_data[0,:] = 1
 
-
         #undescretizing the dataset (to be sent to the black-box model for labelling.)
+        all_undiscretized = np.zeros_like(all_discretized)
         if self.discretizer is not None:
-            all_discretized[1:] = self.discretizer.undiscretize(all_discretized[1:])
-        all_discretized[0] = data_row
+            all_undiscretized[1:] = self.discretizer.undiscretize(all_discretized[1:])
+        all_undiscretized[0] = data_row
+        self.total_sizes += all_data.shape[0]
 
-        print('size:', all_data.shape[0])
-        return all_data, all_discretized
+        # return all_data, all_discretized
+        return all_data, all_undiscretized,sd_values, ohe
 
 
 

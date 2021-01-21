@@ -62,6 +62,7 @@ class BaseDiscretizer():
             self.maxs = self.data_stats.get("maxs")
 
         for feature, qts in zip(self.to_discretize, bins):
+#             print('qts:', qts)
             n_bins = qts.shape[0]  # Actually number of borders (= #bins-1)
             boundaries = np.min(data[:, feature]), np.max(data[:, feature])
             name = feature_names[feature]
@@ -91,10 +92,21 @@ class BaseDiscretizer():
             for x in range(n_bins + 1):
                 selection = data[discretized == x, feature]
                 mean = 0 if len(selection) == 0 else np.mean(selection)
+#                 if x==0: # first bin
+#                     mean = (qts[0]+boundaries[0])/2 if len(selection) == 0 else np.mean(selection)
+#                 elif x==n_bins: # last bin
+#                     mean = np.mean(qts[x-1:x]) if len(selection) == 0 else np.mean(selection)
+#                 else:
+#                     mean = (qts[-1]+boundaries[1])/2 if len(selection) == 0 else np.mean(selection)
                 self.means[feature].append(mean)
                 std = 0 if len(selection) == 0 else np.std(selection)
                 std += 0.00000000001
                 self.stds[feature].append(std)
+#                 if len(selection)==0:
+#                     print('BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB', mean, std)
+#                 else:
+#                     print('NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN', mean, std)
+
             self.mins[feature] = [boundaries[0]] + qts.tolist()
             self.maxs[feature] = qts.tolist() + [boundaries[1]]
             [self.get_undiscretize_value(feature, i)
@@ -125,7 +137,7 @@ class BaseDiscretizer():
                 # print('feature:', feature)
                 # print('self.lambdas[feature]:', self.lambdas[feature])
                 # print('ret[feature+1]:', ret[feature+1])
-                ret.iloc[feature] = int(self.lambdas[feature](ret.iloc[feature]))
+                ret[feature] = int(self.lambdas[feature](ret[feature]))
             else:
                 ret[:, feature] = self.lambdas[feature](
                     ret[:, feature]).astype(int)
@@ -140,17 +152,22 @@ class BaseDiscretizer():
             stds = self.stds[feature]
             minz = (mins[val] - means[val]) / stds[val]
             maxz = (maxs[val] - means[val]) / stds[val]
-            if minz == maxz:
-                self.undiscretize_precomputed[feature][val] = (
-                    np.ones(self.precompute_size) * minz)
-            else:
+            try:
                 self.undiscretize_precomputed[feature][val] = (
                     scipy.stats.truncnorm.rvs(
                         minz, maxz, loc=means[val], scale=stds[val],
                         random_state=self.random_state,
                         size=self.precompute_size))
+            except Exception as e:
+#             if maxz - minz<= 10 ** -11 or (stds[val]<=10**-11 and means[val]==0 and isinstance(self, DecileDiscretizer)):
+#                 print('EEEEEEEEEEEEEEEEEEEEEEE')
+                self.undiscretize_precomputed[feature][val] = (
+                    np.ones(self.precompute_size) * minz)
+#             else:
+#                     raise e
         idx = self.undiscretize_idxs[feature][val]
         ret = self.undiscretize_precomputed[feature][val][idx]
+        ret =  1000000. if np.isinf(ret) else ret
         self.undiscretize_idxs[feature][val] += 1
         return ret
 
@@ -198,13 +215,40 @@ class QuartileDiscretizer(BaseDiscretizer):
         BaseDiscretizer.__init__(self, data, categorical_features,
                                  feature_names, labels=labels,
                                  random_state=random_state)
-
     def bins(self, data, labels):
         bins = []
         for feature in self.to_discretize:
             qts = np.array(np.percentile(data[:, feature], [25, 50, 75]))
             bins.append(qts)
         return bins
+
+# class EightDiscretizer(BaseDiscretizer):
+#     def __init__(self, data, categorical_features, feature_names, labels=None, random_state=None):
+
+#         BaseDiscretizer.__init__(self, data, categorical_features,
+#                                  feature_names, labels=labels,
+#                                  random_state=random_state)
+
+#     def bins(self, data, labels):
+#         bins = []
+#         for feature in self.to_discretize:
+#             qts = np.array(np.percentile(data[:, feature], np.arange(12.5,100,12.5)))
+#             bins.append(qts)
+#         return bins
+
+# class SixDiscretizer(BaseDiscretizer):
+#     def __init__(self, data, categorical_features, feature_names, labels=None, random_state=None):
+
+#         BaseDiscretizer.__init__(self, data, categorical_features,
+#                                  feature_names, labels=labels,
+#                                  random_state=random_state)
+
+#     def bins(self, data, labels):
+#         bins = []
+#         for feature in self.to_discretize:
+#             qts = np.array(np.percentile(data[:, feature], np.arange(100.0/6,100.0,100.0/6)))
+#             bins.append(qts)
+#         return bins
 
 
 class DecileDiscretizer(BaseDiscretizer):
@@ -216,8 +260,12 @@ class DecileDiscretizer(BaseDiscretizer):
     def bins(self, data, labels):
         bins = []
         for feature in self.to_discretize:
-            qts = np.array(np.percentile(data[:, feature],
-                                         [10, 20, 30, 40, 50, 60, 70, 80, 90]))
+            for i in range(10,2,-1):
+                try:
+                    qts = np.array(np.percentile(data[:, feature], np.arange(100/i, 100, 100/i, dtype=int)))
+                    break
+                except:
+                    pass
             bins.append(qts)
         return bins
 
