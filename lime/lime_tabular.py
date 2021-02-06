@@ -25,11 +25,11 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import OneHotEncoder
 
-from xlime.discretize import QuartileDiscretizer
-from xlime.discretize import DecileDiscretizer
-from xlime.discretize import EntropyDiscretizer
-from xlime.discretize import BaseDiscretizer
-from xlime.discretize import StatsDiscretizer
+from lime.discretize import QuartileDiscretizer
+from lime.discretize import DecileDiscretizer
+from lime.discretize import EntropyDiscretizer
+from lime.discretize import BaseDiscretizer
+from lime.discretize import StatsDiscretizer
 from . import explanation
 from . import lime_base
 
