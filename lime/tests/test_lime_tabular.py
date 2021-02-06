@@ -20,7 +20,7 @@ except ImportError:
     # Deprecated in scikit-learn version 0.18, removed in 0.20
     from sklearn.cross_validation import train_test_split
 
-from xlime.lime_tabular import LimeTabularExplainer
+from lime.lime_tabular import LimeTabularExplainer
 
 
 class TestLimeTabular(unittest.TestCase):
