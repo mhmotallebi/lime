@@ -11,7 +11,7 @@ from sklearn.datasets import load_iris, make_classification, make_multilabel_cla
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import Lasso
 from sklearn.linear_model import LinearRegression
-from xlime.discretize import QuartileDiscretizer, DecileDiscretizer, EntropyDiscretizer
+from lime.discretize import QuartileDiscretizer, DecileDiscretizer, EntropyDiscretizer
 
 
 try:

@@ -4,7 +4,7 @@ import numpy as np
 
 from sklearn.datasets import load_iris
 
-from xlime.discretize import QuartileDiscretizer, DecileDiscretizer, EntropyDiscretizer
+from lime.discretize import QuartileDiscretizer, DecileDiscretizer, EntropyDiscretizer
 
 
 class TestDiscretize(TestCase):

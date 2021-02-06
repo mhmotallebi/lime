@@ -11,8 +11,8 @@ from sklearn.pipeline import make_pipeline
 
 import numpy as np
 
-from xlime.lime_text import LimeTextExplainer
-from xlime.lime_text import IndexedCharacters, IndexedString
+from lime.lime_text import LimeTextExplainer
+from lime.lime_text import IndexedCharacters, IndexedString
 
 
 class TestLimeText(unittest.TestCase):
