@@ -40,7 +40,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
-from imblearn.over_sampling import RandomOverSampler
 
 class TableDomainMapper(explanation.DomainMapper):
     """Maps feature ids to names, generates table views, etc"""
@@ -453,13 +452,7 @@ class LimeTabularExplainer(object):
             categorical_features = range(data.shape[1])
             discretized_instance = self.discretizer.discretize(data_row)
             discretized_feature_names = copy.deepcopy(feature_names)
-            # print('discretized_instance:', discretized_instance)
-            # print('categorical_features:', categorical_features)
-            # print('self.discretizer.names:', self.discretizer.names)
             for f in self.discretizer.names:
-                # print('f:', f)
-                # print('self.discretizer.names[f]:', self.discretizer.names[f])
-                # print('discretized_instance[f+1]:', discretized_instance[f+1])
                 discretized_feature_names[f] = self.discretizer.names[f][int(
                         discretized_instance[f])]
 
@@ -485,7 +478,6 @@ class LimeTabularExplainer(object):
             ret_exp.max_value = max_y
             labels = [0]
         for label in labels:
-            # print('in for in lime_tabular')
             (ret_exp.intercept[label],
              ret_exp.local_exp[label],
              ret_exp.score, 
@@ -499,7 +491,6 @@ class LimeTabularExplainer(object):
                                                     feature_selection=self.feature_selection,
                                                     neighborhood_data_sd=sd_data,
                                                     ohe=ohe)
-            # print('after for in lime_tabular')
 
         if self.mode == "regression":
             ret_exp.intercept[1] = ret_exp.intercept[0]
@@ -597,83 +588,17 @@ class LimeTabularExplainer(object):
 
 
         ####################################
-        # let's create the perturbed dataset.
 
-        # This step creates instances that only one feature is different than
-        # the original data point (first circle!), and that feature can be only in the
-        # next bucket (the two closest ones)
-        # print('data_row:', data_row)
-        original_label = np.argmax(predict_fn(data_row.reshape((1,-1)))[0])
-        sd_values = []
-        if mode=='ONE':
-            inverse = np.zeros((int(num_samples), first_row.shape[0]))
-#             final_inverse = np.zeros((inverse.shape[0] * 2, first_row.shape[0]))
-            for column in categorical_features:
-                values = self.feature_values[column]
-#             buckets = 1,2,3,..., 10
-#             original x=bucket 2
-#             distance: 1,0,1,2,3,4,5,6,7,...  (|b_i-x|) for i in [1-10]
-
-#                 f = self.feature_frequencies[column]
-                proximities = np.abs(np.subtract(first_row[column], values))
-                freqs = sp.special.softmax(- 1.0 * proximities) # attemp 1
-
-                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
-                                                          replace=True, p=freqs)
-                inverse[:, column] = inverse_column
-            unique_count = np.unique(inverse, axis=0).shape[0]
-#             print(unique_count)
-            
-            sd_values = np.array(inverse).astype(int)
-            sd_values[0] = first_row
-            if self.discretizer is not None:
-                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
-            inverse[0] = data_row
-            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
-            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
-            return data, inverse,sd_values, ohe
         if mode=='FOURTEEN':
+            sd_values = []
             inverse = np.zeros((int(num_samples), first_row.shape[0]))
-#             final_inverse = np.zeros((inverse.shape[0] * 2, first_row.shape[0]))
             for column in categorical_features:
                 values = self.feature_values[column]
-#             buckets = 1,2,3,..., 10
-#             original x=bucket 2
-#             distance: 1,0,1,2,3,4,5,6,7,...  (|b_i-x|) for i in [1-10]
-
-#                 f = self.feature_frequencies[column]
                 proximities = np.abs(np.subtract(first_row[column], values))
-#                 freqs = self.feature_frequencies[column]
-#                 freqs = sp.special.softmax(- 0.5 * proximities) # attemp 0
-                freqs = sp.special.softmax(- 1.0 * proximities) # attemp 1
-#                 freqs = sp.special.softmax(- 0.1 * proximities) # attemp 2
-#                 freqs = sp.special.softmax(- 5.0 * proximities) # attemp x --> one label for many instances, thus bad results (no file)
-#                 freqs = sp.special.softmax(- 2.0 * proximities) # attemp 3
-#                 freqs = [1/len(proximities) for x in proximities] # attemp 4
-#                 freqs = sp.special.softmax(- 0.1 * proximities) # attemp 5
-
-#                 freqs = sp.special.softmax(f/(0.5*proximities+1))
-#                 freqs = [1./len(values) for x in range(len(values))] # totally random!
-#                 inverse_column = self.random_state.choice(values, size=num_samples,
-#                                                           replace=True, p=freqs)
-
-#                 if random.random()>0.5: # attempt 6, Osmar's suggestion
-#                     freqs = sp.special.softmax(- 1.0 * proximities) # attempt 6
-#                 else: # attempt 6
-#                     freqs = [1/len(proximities) for x in proximities] # attempt 6
+                freqs = sp.special.softmax(- 0.5 * proximities) # attemp 1
 
                 inverse_column = self.random_state.choice(values, size=inverse.shape[0],
                                                           replace=True, p=freqs)
-#                 inverse_column = self.random_state.choice(values, size=inverse.shape[0],
-#                                                           replace=True, p=(freqs+1.0)/(1.0+freqs.shape[0]))
-#                 sd_values.append(inverse_column)
-
-#                 binary_column = np.array([1 if x == first_row[column]
-#                                           else 0 for x in inverse_column])
-#                 binary_column[0] = 1
-#                 data[:, column] = binary_column
-            
-#                 inverse_column[0] = data[0, column]
                 inverse[:, column] = inverse_column
             unique_count = np.unique(inverse, axis=0).shape[0]
             
@@ -685,104 +610,6 @@ class LimeTabularExplainer(object):
             ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
             sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
             return data, inverse,sd_values, ohe
-            
-        elif mode=='FIFTEEN':
-            inverse = np.zeros((int(num_samples), first_row.shape[0]))
-#             final_inverse = np.zeros((inverse.shape[0] * 2, first_row.shape[0]))
-            for column in categorical_features:
-                values = self.feature_values[column]
-#                 f = self.feature_frequencies[column]
-                proximities = np.abs(np.subtract(first_row[column], values))
-#                 freqs = self.feature_frequencies[column]
-#                 freqs = sp.special.softmax(- 0.5 * proximities) # attemp 0
-#                 freqs = sp.special.softmax(- 1.0 * proximities) # attemp 1
-#                 freqs = sp.special.softmax(- 0.1 * proximities) # attemp 2
-#                 freqs = sp.special.softmax(- 5.0 * proximities) # attemp x --> one label for many instances, thus bad results (no file)
-#                 freqs = sp.special.softmax(- 2.0 * proximities) # attemp 3
-                freqs = [1/len(proximities) for x in proximities] # attemp 4
-#                 freqs = sp.special.softmax(- 0.1 * proximities) # attemp 5
-
-#                 freqs = sp.special.softmax(f/(0.5*proximities+1))
-#                 freqs = [1./len(values) for x in range(len(values))] # totally random!
-#                 inverse_column = self.random_state.choice(values, size=num_samples,
-#                                                           replace=True, p=freqs)
-                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
-                                                          replace=True, p=freqs)
-#                 inverse_column = self.random_state.choice(values, size=inverse.shape[0],
-#                                                           replace=True, p=(freqs+1.0)/(1.0+freqs.shape[0]))
-#                 sd_values.append(inverse_column)
-
-#                 binary_column = np.array([1 if x == first_row[column]
-#                                           else 0 for x in inverse_column])
-#                 binary_column[0] = 1
-#                 data[:, column] = binary_column
-            
-#                 inverse_column[0] = data[0, column]
-                inverse[:, column] = inverse_column
-            unique_count = np.unique(inverse, axis=0).shape[0]
-            
-            sd_values = np.array(inverse).astype(int)
-            sd_values[0] = first_row
-            if self.discretizer is not None:
-                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
-            inverse[0] = data_row
-            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
-            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
-            return data, inverse,sd_values, ohe
-        elif mode=='SIXTEEN':
-            inverse = np.zeros((int(num_samples), first_row.shape[0]))
-            for column in categorical_features:
-                values = self.feature_values[column]
-                proximities = np.abs(np.subtract(first_row[column], values))
-                freqs = sp.special.softmax(- 0.5 * proximities) ## 
-                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
-                                                          replace=True, p=freqs)
-                inverse[:, column] = inverse_column
-            unique_count = np.unique(inverse, axis=0).shape[0]
-            sd_values = np.array(inverse).astype(int)
-            sd_values[0] = first_row
-            if self.discretizer is not None:
-                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
-            inverse[0] = data_row
-            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
-            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
-            return data, inverse, sd_values, ohe
-        elif mode=='SEVENTEEN':
-            inverse = np.zeros((int(num_samples), first_row.shape[0]))
-            for column in categorical_features:
-                values = self.feature_values[column]
-                proximities = np.abs(np.subtract(first_row[column], values))
-                freqs = sp.special.softmax(- 0.1 * proximities) ## 
-                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
-                                                          replace=True, p=freqs)
-                inverse[:, column] = inverse_column
-            unique_count = np.unique(inverse, axis=0).shape[0]
-            sd_values = np.array(inverse).astype(int)
-            sd_values[0] = first_row
-            if self.discretizer is not None:
-                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
-            inverse[0] = data_row
-            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
-            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
-            return data, inverse, sd_values, ohe
-        elif mode=='EIGHTEEN':
-            inverse = np.zeros((int(num_samples), first_row.shape[0]))
-            for column in categorical_features:
-                values = self.feature_values[column]
-                proximities = np.abs(np.subtract(first_row[column], values))
-                freqs = sp.special.softmax(- 0.01 * proximities) ## 
-                inverse_column = self.random_state.choice(values, size=inverse.shape[0],
-                                                          replace=True, p=freqs)
-                inverse[:, column] = inverse_column
-            unique_count = np.unique(inverse, axis=0).shape[0]
-            sd_values = np.array(inverse).astype(int)
-            sd_values[0] = first_row
-            if self.discretizer is not None:
-                inverse[1:] = self.discretizer.undiscretize(inverse[1:])
-            inverse[0] = data_row
-            ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
-            sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
-            return data, inverse, sd_values, ohe
             
         else:
             raise Exception("----Unknown mode for XLIME: {} ----".format(mode))

@@ -19,12 +19,9 @@ from sklearn.linear_model import Ridge, lars_path
 from sklearn.utils import check_random_state
 import sklearn.tree
 from pprint import pprint
-from imblearn.over_sampling import RandomOverSampler
 from sklearn.metrics import accuracy_score
 
 from sigdirect import SigDirect
-import config
-print('xlime ALPHA: {}'.format(config.ALPHA))
 
 def get_all_rules(input_):
     neighborhood_data, labels_column, ohe, true_label = input_
@@ -32,41 +29,31 @@ def get_all_rules(input_):
     early_stopping = True # TODO
     do_pruning = True
     is_cpp_code=True # TODO: to change to python, update the path in experiments_config.py
+    threshold = 0.00000005
     
-#     for threshold in [0.00000005, 0.0000005, 0.000005, 0.00005, 0.0005, 0.05]:
-    for threshold in [0.00000005]: # TODO
-#         print('threshold: {}'.format(threshold))
 
-        hash_value = hash(neighborhood_data.tostring() + 
-                          labels_column.tostring() + 
-                          str.encode(str(do_pruning)) +
-                          str.encode(str(early_stopping)) +
-                          str.encode(str(config.ALPHA)))
-        clf_path = "{}.pickle".format(hash_value)
-
+    hash_value = hash(neighborhood_data.tostring() 
+                    + labels_column.tostring()
+                    + str.encode(str(do_pruning))
+                    + str.encode(str(early_stopping))
+#                         + str.encode(str(config.ALPHA)) # or threshold
+                     )
+    clf_path = "{}.pickle".format(hash_value)
 #         if False:
-        if os.path.exists(clf_path):
-            clf = pickle.load(open(clf_path, 'rb'), encoding='latin1')
-        else:
-            if is_cpp_code: # C++ / cython implementation
-                clf = SigDirect(clf_version=1, alpha=threshold,  # TODO
-                                early_stopping=early_stopping, confidence_threshold=0.5, is_binary=True) # TODO
-            else: # python implementation
-                config.ALPHA     = threshold
-                config.ALPHA_LOG = np.log(config.ALPHA)
-                clf = SigDirect(early_stopping=early_stopping)
-            if do_pruning:
-                clf.fit(neighborhood_data, labels_column)
-            else: # not working with cpp
-                clf.fit(neighborhood_data, labels_column, prune=False)
-            pickle.dump(clf, open(clf_path, 'wb'))
-        local_pred =  clf.predict(neighborhood_data[0].reshape((1,-1)), 2).astype(int)[0]
-#         all_pred   = clf.predict(neighborhood_data, heuristic=2).astype(int)
-#         original_point_matches = local_pred==labels_column[0]
-#         acc_all_neighbours = sklearn.metrics.accuracy_score(labels_column, all_pred)
-        if local_pred==true_label:
-            break
-#         print(local_pred, true_label, Counter(labels_column))
+    if os.path.exists(clf_path):
+        clf = pickle.load(open(clf_path, 'rb'), encoding='latin1')
+    else:
+        if is_cpp_code: # C++ / cython implementation
+            clf = SigDirect(clf_version=1, alpha=threshold,  # TODO
+                            early_stopping=early_stopping, confidence_threshold=0.5, is_binary=True) # TODO
+        else: # python implementation
+            clf = SigDirect(early_stopping=early_stopping)
+        if do_pruning:
+            clf.fit(neighborhood_data, labels_column)
+        else: # not working with cpp
+            clf.fit(neighborhood_data, labels_column, prune=False)
+        pickle.dump(clf, open(clf_path, 'wb'))
+    local_pred =  clf.predict(neighborhood_data[0].reshape((1,-1)), 2).astype(int)[0]
 
     all_rules = clf.get_all_rules()
     return all_rules, local_pred
@@ -75,8 +62,6 @@ def get_features_sd_4(all_rules, true_label):
     
     approach = 14
     
-    #########################################
-    #########################################
     # use applied rules first, and then the rest of the applicable rules, and then all rules (other labels, rest of them match)
     if approach==14:
 #         predicted_label = clf.predict(neighborhood_data[0].reshape((1,-1)), heuristic=2).astype(int)[0]
@@ -86,7 +71,7 @@ def get_features_sd_4(all_rules, true_label):
                               key=lambda x:(
                                             len(x[0].get_items()),  
                                             - x[0].get_confidence() * x[0].get_support(), 
-                                            x[0].get_ss(),
+                                            x[0].get_log_p(),
                                             - x[0].get_support(),
                                             -x[0].get_confidence(), 
                                            ), 
@@ -98,7 +83,7 @@ def get_features_sd_4(all_rules, true_label):
                               key=lambda x:(
                                             len(x[0].get_items()),  
                                             - x[0].get_confidence() * x[0].get_support(), 
-                                            x[0].get_ss(),
+                                            x[0].get_log_p(),
                                             - x[0].get_support(),
                                             -x[0].get_confidence(), 
                                            ), 
@@ -110,7 +95,7 @@ def get_features_sd_4(all_rules, true_label):
                               key=lambda x:(
                                             len(x[0].get_items()),  
                                             - x[0].get_confidence() * x[0].get_support(), 
-                                            x[0].get_ss(),
+                                            x[0].get_log_p(),
                                             - x[0].get_support(),
                                             -x[0].get_confidence(), 
                                            ), 
@@ -190,175 +175,7 @@ def get_features_sd_4(all_rules, true_label):
                 other_rules.append(rule)              
             counter -= 1
         set_size_3 = len(bb_features)
-        if False:
-            print(true_label, 
-#               predicted_label, 
-              sum([len(x) for x in all_rules.values()]), 
-              len(all_rules[true_label]), 
-#               len(sorted_rules),
-              'applied:',
-              len(applied_rules),
-              'added_features_1:',
-              set_size_1,
-              'applicables:',
-              len(applicable_rules),
-              'added_features_2:',
-              set_size_2 - set_size_1,
-              'others:',
-              len(other_rules),
-#               'added_features_3:',
-#               set_size_3 - set_size_2,
-              [str(x) for x in applied_rules],
-              [str(x) for x in applicable_rules],
-#               len(clf.get_applicable_rules(neighborhood_data[0])[true_label]), 
-#               neighborhood_data[0].nonzero()[0],
-#               '\n', 
-#               '\n'.join(map(str, all_rules[predicted_label])),
-#               '\n'.join([str(x) for x in clf.get_applicable_rules(neighborhood_data[0])[true_label]]),
-#                   ohe.categories_,
-#                   original_point_sd.nonzero(),
-             )
-        feature_value_pairs = sorted(bb_features.items(), key=lambda x:x[1], reverse=True)        
-    #########################################
-    #########################################
-    # use applied rules first, and then the rest of the applicable rules, and then all rules (other labels, rest of them match)
-    if approach==15:
-#         predicted_label = clf.predict(neighborhood_data[0].reshape((1,-1)), heuristic=2).astype(int)[0]
-        
-        # applied rules,
-        applied_sorted_rules = sorted(all_rules[true_label], 
-                              key=lambda x:(
-                                            len(x[0].get_items()),  
-                                            - x[0].get_confidence() * x[0].get_support(), 
-                                            x[0].get_ss(),
-                                            - x[0].get_support(),
-                                           ), 
-                              reverse=False)
-        applied_sorted_rules = [x for x in applied_sorted_rules if x[0].get_confidence() * x[0].get_support()>0.025]
 
-        # applicable rules, except the ones in applied rules.
-        applicable_sorted_rules = sorted(itertools.chain(*[all_rules[x] for x in all_rules if x!=true_label]), 
-                              key=lambda x:(
-                                            len(x[0].get_items()),  
-                                            - x[0].get_confidence() * x[0].get_support(), 
-                                            x[0].get_ss(),
-                                            - x[0].get_support(),
-                                            -x[0].get_confidence(), 
-                                           ), 
-                              reverse=False)
-        applicable_sorted_rules = [x for x in applicable_sorted_rules if (x[0].get_confidence()* x[0].get_support() )>0.025]
-
-        # all rules, except the ones in applied rules.
-        other_sorted_rules = sorted(itertools.chain(*[all_rules[x] for x in all_rules if x!=true_label]), 
-                              key=lambda x:(
-                                            len(x[0].get_items()),  
-                                            - x[0].get_confidence() * x[0].get_support(), 
-                                            x[0].get_ss(),
-                                            - x[0].get_support(),
-                                            -x[0].get_confidence(), 
-                                           ), 
-                              reverse=False)
-        other_sorted_rules = [x for x in other_sorted_rules if (x[0].get_confidence() * x[0].get_support())>0.050]
-        
-        
-        counter = len(all_rules)
-        bb_features = defaultdict(int)
-
-        # First add applied rules
-        applied_rules = []
-        for rule,ohe,original_point_sd in applied_sorted_rules:
-            temp = np.zeros(original_point_sd.shape[0]).astype(int)
-            temp[rule.get_items()] = 1
-            if np.sum(temp & original_point_sd.astype(int))!=temp.sum():
-                continue
-            else:
-                applied_rules.append(rule)
-            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0]
-            for item, val in enumerate(rule_items):
-                if val is None:
-                    continue
-                if item not in bb_features:
-#                 bb_features[item] += rule.get_support()
-                    bb_features[item] += counter
-#                 bb_features[item] = max(bb_features[item],  rule.get_confidence()/len(rule.get_items()))
-            counter -= 1
-        set_size_1 = len(bb_features)
-
-        # Second, add applicable rules
-        applicable_rules = []
-        for rule,ohe,original_point_sd in applicable_sorted_rules:
-            temp = np.zeros(original_point_sd.shape[0]).astype(int)
-            temp[rule.get_items()] = 1
-            if np.sum(temp & original_point_sd.astype(int))!=temp.sum():
-                continue
-            else:
-                applicable_rules.append(rule)
-            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0]
-            for item, val in enumerate(rule_items):
-                if val is None:
-                    continue
-                if item not in bb_features:
-#                 bb_features[item] += rule.get_support()
-                    bb_features[item] += counter
-            counter -= 1
-        set_size_2 = len(bb_features)
-
-        # Third, add other rules.
-        other_rules = []
-        for rule,ohe,original_point_sd in other_sorted_rules:
-            temp = np.zeros(original_point_sd.shape[0]).astype(int)
-            temp[rule.get_items()] = 1
-            # avoid applicable rules
-            if np.array_equal(temp, temp & original_point_sd[0].astype(int)):
-                continue
-#             elif temp.sum()==1:
-#                 continue
-#             elif temp.sum() - np.sum(temp & original_point_sd[0].astype(int)) >1:
-#                 continue
-#             else:
-            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0]
-            seen_set = 0
-            for item, val in enumerate(rule_items):
-                if val is None:
-                    continue
-                if item not in bb_features:
-#                 bb_features[item] += rule.get_support()
-#                     bb_features[item] += counter
-                    candid_feature = item
-                    pass
-                else:
-                    seen_set += 1
-#             if seen_set==temp.sum()-1:
-                bb_features[item] += counter
-                other_rules.append(rule)              
-            counter -= 1
-        set_size_3 = len(bb_features)
-        if False:
-            print(true_label, 
-#               predicted_label, 
-              sum([len(x) for x in all_rules.values()]), 
-              len(all_rules[true_label]), 
-#               len(sorted_rules),
-              'applied:',
-              len(applied_rules),
-              'added_features_1:',
-              set_size_1,
-              'applicables:',
-              len(applicable_rules),
-              'added_features_2:',
-              set_size_2 - set_size_1,
-              'others:',
-              len(other_rules),
-#               'added_features_3:',
-#               set_size_3 - set_size_2,
-              [str(x) for x in applied_rules],
-              [str(x) for x in applicable_rules],
-#               len(clf.get_applicable_rules(neighborhood_data[0])[true_label]), 
-#               neighborhood_data[0].nonzero()[0],
-#               '\n', 
-#               '\n'.join(map(str, all_rules[predicted_label])),
-#               '\n'.join([str(x) for x in clf.get_applicable_rules(neighborhood_data[0])[true_label]]),
-             )
         feature_value_pairs = sorted(bb_features.items(), key=lambda x:x[1], reverse=True)        
 
 
