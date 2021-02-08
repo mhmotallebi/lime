@@ -218,6 +218,8 @@ class DecileDiscretizer(BaseDiscretizer):
                 except:
                     pass
             bins.append(qts)
+#         print('###### bins ########')
+#         print(bins)
         return bins
 
 

@@ -115,10 +115,14 @@ def get_features_sd_4(all_rules, true_label):
                 continue
             else:
                 applied_rules.append(rule)
-            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0]
+#             rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT
+            rule_items = temp
+            print(rule)
             for item, val in enumerate(rule_items):
                 if val is None:
                     continue
+                if val==0: ## TEXT
+                    continue ## TEXT
 #                 if item not in bb_features:
                 bb_features[item] += rule.get_support()
 #                     bb_features[item] += counter
@@ -135,7 +139,8 @@ def get_features_sd_4(all_rules, true_label):
                 continue
             else:
                 applicable_rules.append(rule)
-            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0]
+#             rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT
+            rule_items = temp
             for item, val in enumerate(rule_items):
                 if val is None:
                     continue
@@ -158,7 +163,8 @@ def get_features_sd_4(all_rules, true_label):
             elif temp.sum() - np.sum(temp & original_point_sd.astype(int)) >1: # error??? 
                 continue
 #             else:
-            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0]
+#             rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT
+            rule_items = temp
             seen_set = 0
             for item, val in enumerate(rule_items):
                 if val is None:
@@ -469,6 +475,7 @@ class LimeBase(object):
                     elif Counter(labels_column)[labels_column[0]]<labels_column.shape[0]/len(Counter(labels_column)):
                         pass
 
+                    #########################
                     all_rules = defaultdict(list)
                     r_, predicted_label = get_all_rules((neighborhood_data_sd, labels_column, ohe, true_label))
                     if predicted_label==true_label:                 

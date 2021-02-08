@@ -369,7 +369,7 @@ class LimeTabularExplainer(object):
                 yss.append(yss_)
         else:
             data, inverse, sd_data, ohe = self.__data_inverse(data_row, num_samples, predict_fn, classes, xlime_mode)
-            yss = predict_fn(inverse)
+            yss = predict_fn(sd_data) ## TEXT
         if sp.sparse.issparse(data):
             # Note in sparse case we don't subtract mean since data would become dense
             scaled_data = data.multiply(self.scaler.scale_)
@@ -610,7 +610,14 @@ class LimeTabularExplainer(object):
             ohe = OneHotEncoder(categories='auto', handle_unknown='ignore')
             sd_values = np.asarray(ohe.fit_transform(sd_values).todense()).astype(int)
             return data, inverse,sd_values, ohe
-            
+        elif mode=='TEXT':
+            sd_values = np.zeros((int(num_samples), first_row.shape[0]))
+            for idx in np.nonzero(first_row)[0]:
+                t = np.random.choice((0,1), size=num_samples)
+                sd_values[:,idx] = t
+            sd_values[0] = first_row
+            print(sd_values.sum(axis=1)[:10])
+            return data, data, sd_values, None            
         else:
             raise Exception("----Unknown mode for XLIME: {} ----".format(mode))
 
