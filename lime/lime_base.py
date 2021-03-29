@@ -1,25 +1,17 @@
 """
 Contains abstract functionality for learning locally linear sparse model.
 """
-# from __future__ import print_function
+from __future__ import print_function
 
-import sys
-import math
-import gc
-import copy
-import os.path
+import os
 import pickle
 import itertools
 from collections import Counter, defaultdict
-from importlib import reload  
 
 import numpy as np
 import scipy as sp
 from sklearn.linear_model import Ridge, lars_path
 from sklearn.utils import check_random_state
-import sklearn.tree
-from pprint import pprint
-from sklearn.metrics import accuracy_score
 
 from sigdirect import SigDirect
 
@@ -30,9 +22,8 @@ def get_all_rules(input_):
     do_pruning = True
     is_cpp_code=True # TODO: to change to python, update the path in experiments_config.py
     threshold = 0.00000005
-    
 
-    hash_value = hash(neighborhood_data.tostring() 
+    hash_value = hash(neighborhood_data.tostring()
                     + labels_column.tostring()
                     + str.encode(str(do_pruning))
                     + str.encode(str(early_stopping))
@@ -59,13 +50,13 @@ def get_all_rules(input_):
     return all_rules, local_pred
 
 def get_features_sd_4(all_rules, true_label):
-    
+
     approach = 14
-    
+
     # use applied rules first, and then the rest of the applicable rules, and then all rules (other labels, rest of them match)
     if approach==14:
 #         predicted_label = clf.predict(neighborhood_data[0].reshape((1,-1)), heuristic=2).astype(int)[0]
-        
+
         # applied rules,
         applied_sorted_rules = sorted(all_rules[true_label], 
                               key=lambda x:(
@@ -101,8 +92,7 @@ def get_features_sd_4(all_rules, true_label):
                                            ), 
                               reverse=False)
         other_sorted_rules = [x for x in other_sorted_rules if (x[0].get_confidence() * x[0].get_support())>1.000]
-        
-        
+
         counter = len(all_rules)
         bb_features = defaultdict(int)
 
@@ -115,14 +105,14 @@ def get_features_sd_4(all_rules, true_label):
                 continue
             else:
                 applied_rules.append(rule)
-#             rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT
+            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT (comment for TEXT)
             rule_items = temp
-            print(rule)
+#             print(rule)
             for item, val in enumerate(rule_items):
                 if val is None:
                     continue
-                if val==0: ## TEXT
-                    continue ## TEXT
+#                 if val==0: ## TEXT (uncomment for TEXT)
+#                     continue ## TEXT (uncomment for TEXT)
 #                 if item not in bb_features:
                 bb_features[item] += rule.get_support()
 #                     bb_features[item] += counter
@@ -139,7 +129,7 @@ def get_features_sd_4(all_rules, true_label):
                 continue
             else:
                 applicable_rules.append(rule)
-#             rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT
+            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT (comment for TEXT)
             rule_items = temp
             for item, val in enumerate(rule_items):
                 if val is None:
@@ -163,7 +153,7 @@ def get_features_sd_4(all_rules, true_label):
             elif temp.sum() - np.sum(temp & original_point_sd.astype(int)) >1: # error??? 
                 continue
 #             else:
-#             rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT
+            rule_items = ohe.inverse_transform(temp.reshape((1,-1)))[0] ## TEXT (comment for TEXT)
             rule_items = temp
             seen_set = 0
             for item, val in enumerate(rule_items):
@@ -287,7 +277,6 @@ class LimeBase(object):
                     indices = weighted_data.indices[nnz_indexes]
                 return indices
             else:
-                # print(data[0])
                 weighted_data = coef * data[0]
                 feature_weights = sorted(
                     zip(range(data.shape[1]), weighted_data),
@@ -315,7 +304,7 @@ class LimeBase(object):
                 n_method = 'highest_weights'
             return self.feature_selection(data, labels, weights,
                                           num_features, n_method)
-    # @profile(stream=fp)
+
     def explain_instance_with_data(self,
                                    neighborhood_data,
                                    neighborhood_labels,
@@ -361,152 +350,108 @@ class LimeBase(object):
             score is the R^2 value of the returned explanation
             local_pred is the prediction of the explanation model on the original instance
         """
+
         feature_selection = 'none'
         weights = self.kernel_fn(distances)
+        labels_column = neighborhood_labels[:, label]
+        used_features = self.feature_selection(neighborhood_data,
+                                               labels_column,
+                                               weights,
+                                               num_features,
+                                               feature_selection)
 
-        if isinstance(model_regressor, sklearn.tree.DecisionTreeRegressor):
-            def get_features_dt(clf, row):
-                feature = clf.tree_.feature
-                leave_id = clf.apply(row.reshape(1, -1))
-                node_indicator = clf.decision_path([row])
-                features = []
-                node_index = node_indicator.indices[node_indicator.indptr[0]:node_indicator.indptr[1]]
-
-                for node_id in node_index:
-                    if leave_id[0] == node_id:  # <-- changed != to ==
-                        continue # <-- comment out
-                    else: # < -- added else to iterate through decision nodes
-                        features.append(feature[node_id])
-                return features
-            
-            easy_model = model_regressor
-            # print(labels_column)
-            easy_model.fit(neighborhood_data[:, :], 
-                            labels_column)
-            prediction_score = easy_model.score(
-                neighborhood_data[:, :],
-                labels_column, sample_weight=weights)
-            local_pred = easy_model.predict(neighborhood_data[0, :].reshape(1, -1))
-            important_features = get_features_dt(easy_model, neighborhood_data[0,:])
-            feature_value_pairs = [(x,1./len(important_features)) for x in important_features]
-            return (0, feature_value_pairs, prediction_score, local_pred)
-
-        elif isinstance(model_regressor, str):
+        if isinstance(model_regressor, str):
             try:
-                if type(neighborhood_data_sd)==list:
-                    fidelity = 0.0
-                    all_rules = defaultdict(list)
-                    for x,y,z in zip(neighborhood_data_sd, neighborhood_labels, ohe):
-                        ##### multi-class vs binary dataset for neighbourhood generation #####
-                        true_label = y[0].argmax()
-                        labels_column = np.argmax(y, axis=1)
-                        r_, predicted_label = get_all_rules((x, labels_column, z, true_label))
-                        if predicted_label!=true_label:
-                            continue
-                        else:
-                            fidelity = 1.0
-                        for i,j in r_.items():
-#                             all_rules[i].extend([(x_,z,x[0]) for x_ in j])
-                            all_rules[i] = [(t,z,x[0]) for t in j]
-                        break
-                    _, feature_value_pairs, prediction_score, local_pred = get_features_sd_4(
-                                                                                    all_rules, 
-                                                                                    true_label, 
-                                                                                    )
-#                     if len(all_rules)==0:
-#                         fidelity = 0.0
-                else:
-                    ##### multi-class vs binary dataset for neighbourhood generation #####
+                ##### multi-class vs binary dataset for neighbourhood generation #####
 #                     true_label = 1
 #                     labels_column = np.argmax(neighborhood_labels, axis=1)==neighborhood_labels[0].argmax()
-                    true_label = neighborhood_labels[0].argmax()
-                    labels_column = np.argmax(neighborhood_labels, axis=1)
-                    fidelity = 1.0
-                    all_rules = defaultdict(list)
-                    
-                    r_, predicted_label = get_all_rules((neighborhood_data_sd, labels_column, ohe, true_label))
-                    no_retry = True # 
-                    if predicted_label==true_label:                 
-                        for x,y in r_.items():
-                            all_rules[x] = [(t,ohe,neighborhood_data_sd[0]) for t in y]
-                        _, feature_value_pairs, prediction_score, local_pred = get_features_sd_4(all_rules, true_label)
-                        return (0, feature_value_pairs, prediction_score, fidelity)
-                    elif no_retry: # 
-                        fidelity = 0.0
-                        _, feature_value_pairs, prediction_score, local_pred = get_features_sd_4(all_rules, true_label)
-                        return (0, feature_value_pairs, prediction_score, fidelity)
+                true_label = neighborhood_labels[0].argmax()
+                labels_column = np.argmax(neighborhood_labels, axis=1)
+                fidelity = 1.0
+                all_rules = defaultdict(list)
+
+                r_, predicted_label = get_all_rules((neighborhood_data_sd, labels_column, ohe, true_label))
+                no_retry = True # 
+                if predicted_label==true_label:                 
+                    for x,y in r_.items():
+                        all_rules[x] = [(t,ohe,neighborhood_data_sd[0]) for t in y]
+                    _, feature_value_pairs, prediction_score, local_pred = get_features_sd_4(all_rules, true_label)
+                    return (0, feature_value_pairs, prediction_score, fidelity)
+                elif no_retry: # 
+                    fidelity = 0.0
+                    _, feature_value_pairs, prediction_score, local_pred = get_features_sd_4(all_rules, true_label)
+                    return (0, feature_value_pairs, prediction_score, fidelity)
 
 
-                    labels_column_2 = np.zeros_like(labels_column)
-                    neighborhood_data_sd_2 = np.zeros_like(neighborhood_data_sd)
-                    
-                    distances = - np.abs(np.subtract(neighborhood_data_sd[0], neighborhood_data_sd)).sum()
-                    ps_p = sp.special.softmax(1.0000005 * distances / np.equal(labels_column,labels_column[0]).astype(int)) 
-                    ps_n = sp.special.softmax(0.500001 * distances / np.not_equal(labels_column,labels_column[0]).astype(int)) 
+                labels_column_2 = np.zeros_like(labels_column)
+                neighborhood_data_sd_2 = np.zeros_like(neighborhood_data_sd)
+
+                distances = - np.abs(np.subtract(neighborhood_data_sd[0], neighborhood_data_sd)).sum()
+                ps_p = sp.special.softmax(1.0000005 * distances / np.equal(labels_column,labels_column[0]).astype(int)) 
+                ps_n = sp.special.softmax(0.500001 * distances / np.not_equal(labels_column,labels_column[0]).astype(int)) 
 
 #                     p_size = int((10/math.sqrt(neighborhood_labels.shape[1])) * labels_column.shape[0]/10)
-                    p_size = int(5 * labels_column.shape[0]/10)
-                    n_size = labels_column.shape[0] - p_size
+                p_size = int(5 * labels_column.shape[0]/10)
+                n_size = labels_column.shape[0] - p_size
 
-                    i_p = np.random.choice(labels_column.shape[0], 
-                                    size=p_size, 
-                                    replace=True, 
-                                    p=ps_p)
-                    i_n = np.random.choice(labels_column.shape[0], 
-                                    size=n_size, 
-                                    replace=True, 
-                                    p=ps_n)
+                i_p = np.random.choice(labels_column.shape[0], 
+                                size=p_size, 
+                                replace=True, 
+                                p=ps_p)
+                i_n = np.random.choice(labels_column.shape[0], 
+                                size=n_size, 
+                                replace=True, 
+                                p=ps_n)
 #                     print(i_p.shape, i_n.shape, p_size)
-                    labels_column_2[:p_size] =  labels_column[i_p]
-                    labels_column_2[p_size:] =  labels_column[i_n]
-                    neighborhood_data_sd_2[:p_size] = neighborhood_data_sd[i_p]
-                    neighborhood_data_sd_2[p_size:] = neighborhood_data_sd[i_n]
+                labels_column_2[:p_size] =  labels_column[i_p]
+                labels_column_2[p_size:] =  labels_column[i_n]
+                neighborhood_data_sd_2[:p_size] = neighborhood_data_sd[i_p]
+                neighborhood_data_sd_2[p_size:] = neighborhood_data_sd[i_n]
 
-                    neighborhood_data_sd_2[:10] = neighborhood_data_sd[0]
-                    labels_column_2[:10] = labels_column[0]
-                    neighborhood_data_sd = neighborhood_data_sd_2
-                    labels_column = labels_column_2
+                neighborhood_data_sd_2[:10] = neighborhood_data_sd[0]
+                labels_column_2[:10] = labels_column[0]
+                neighborhood_data_sd = neighborhood_data_sd_2
+                labels_column = labels_column_2
 
 
-                    # more than half belong to target class:
-                    if Counter(labels_column)[labels_column[0]]>labels_column.shape[0]/2:
-                        pass
-                    # less than 1/n belong to target class (n classes):
-                    elif Counter(labels_column)[labels_column[0]]<labels_column.shape[0]/len(Counter(labels_column)):
-                        pass
+                # more than half belong to target class:
+                if Counter(labels_column)[labels_column[0]]>labels_column.shape[0]/2:
+                    pass
+                # less than 1/n belong to target class (n classes):
+                elif Counter(labels_column)[labels_column[0]]<labels_column.shape[0]/len(Counter(labels_column)):
+                    pass
 
-                    #########################
-                    all_rules = defaultdict(list)
-                    r_, predicted_label = get_all_rules((neighborhood_data_sd, labels_column, ohe, true_label))
-                    if predicted_label==true_label:                 
-                        for x,y in r_.items():
-                            all_rules[x] = [(t,ohe,neighborhood_data_sd[0]) for t in y]
-                    else:
-                        fidelity = 0.0
+                #########################
+                all_rules = defaultdict(list)
+                r_, predicted_label = get_all_rules((neighborhood_data_sd, labels_column, ohe, true_label))
+                if predicted_label==true_label:                 
+                    for x,y in r_.items():
+                        all_rules[x] = [(t,ohe,neighborhood_data_sd[0]) for t in y]
+                else:
+                    fidelity = 0.0
                 _, feature_value_pairs, prediction_score, local_pred = get_features_sd_4(all_rules, true_label)
                 return (0, feature_value_pairs, prediction_score, fidelity)
             except Exception as e:
                 print(repr(e))
 #                 raise e
                 return (0, [], 0.0, 0.0)
-        else:
-            if model_regressor is None:
-                model_regressor = Ridge(alpha=1, fit_intercept=True,
-                                        random_state=self.random_state)
-            easy_model = model_regressor
-            easy_model.fit(neighborhood_data[:, used_features],
-                           labels_column, sample_weight=weights)
-            prediction_score = easy_model.score(
-                neighborhood_data[:, used_features],
-                labels_column, sample_weight=weights)
-            print('model type:', type(easy_model))
-            local_pred = easy_model.predict(neighborhood_data[0, used_features].reshape(1, -1))
+        if model_regressor is None:
+            model_regressor = Ridge(alpha=1, fit_intercept=True,
+                                    random_state=self.random_state)
+        easy_model = model_regressor
+        easy_model.fit(neighborhood_data[:, used_features],
+                       labels_column, sample_weight=weights)
+        prediction_score = easy_model.score(
+            neighborhood_data[:, used_features],
+            labels_column, sample_weight=weights)
 
-            if self.verbose:
-                print('Intercept', easy_model.intercept_)
-                print('Prediction_local', local_pred,)
-                print('Right:', neighborhood_labels[0, label])
-            return (easy_model.intercept_,
-                    sorted(zip(used_features, easy_model.coef_),
-                           key=lambda x: np.abs(x[1]), reverse=True),
-                    prediction_score, local_pred)
+        local_pred = easy_model.predict(neighborhood_data[0, used_features].reshape(1, -1))
+
+        if self.verbose:
+            print('Intercept', easy_model.intercept_)
+            print('Prediction_local', local_pred,)
+            print('Right:', neighborhood_labels[0, label])
+        return (easy_model.intercept_,
+                sorted(zip(used_features, easy_model.coef_),
+                       key=lambda x: np.abs(x[1]), reverse=True),
+                prediction_score, local_pred)
