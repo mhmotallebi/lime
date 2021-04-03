@@ -134,12 +134,12 @@ def get_features_sigdirect(all_rules, true_label):
                 seen_set += 1
         if seen_set==temp.sum()-1: # and (item not in bb_features):
             bb_features[candid_feature] += counter
-            other_rules.append(rule)              
+            other_rules.append(rule)
         counter -= 1
 
-    feature_value_pairs = sorted(bb_features.items(), key=lambda x:x[1], reverse=True)        
+    feature_value_pairs = sorted(bb_features.items(), key=lambda x:x[1], reverse=True)
 
-    return (0, feature_value_pairs, None, 0)
+    return feature_value_pairs, None
 
 
 class LimeBase(object):
@@ -315,7 +315,6 @@ class LimeBase(object):
             local_pred is the prediction of the explanation model on the original instance
         """
 
-        feature_selection = 'none'
         weights = self.kernel_fn(distances)
         labels_column = neighborhood_labels[:, label]
         used_features = self.feature_selection(neighborhood_data,
@@ -337,7 +336,7 @@ class LimeBase(object):
             else:
                 predicted_label = -1 # to show we couldn't predict it correctly
 
-            _, feature_value_pairs, prediction_score, local_pred = get_features_sigdirect(all_rules, true_label)
+            feature_value_pairs, prediction_score = get_features_sigdirect(all_rules, true_label)
             return (0, feature_value_pairs, prediction_score, predicted_label)
         if model_regressor is None:
             model_regressor = Ridge(alpha=1, fit_intercept=True,
